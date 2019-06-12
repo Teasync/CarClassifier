@@ -123,7 +123,7 @@ def train(steps_per_epoch=1000, epochs=1):
         steps_per_epoch=steps_per_epoch,
         epochs=epochs,
         validation_data=test_gen,
-        validation_steps=steps_per_epoch/2,
+        validation_steps=steps_per_epoch/4,
         workers=12,
         class_weight=class_weights
     )
