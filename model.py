@@ -2,12 +2,14 @@ from keras.preprocessing.image import ImageDataGenerator, array_to_img, img_to_a
 from keras.layers import *
 from keras.models import Sequential, load_model
 from keras import optimizers
+from keras.regularizers import *
 from datetime import datetime
 from sklearn.utils import class_weight
 import keras.backend as K
 import glob
 import os
 import numpy as np
+from PIL import Image
 
 train_datagen = ImageDataGenerator(
     rotation_range=30,
@@ -39,9 +41,9 @@ test_gen = test_datagen.flow_from_directory(
 )
 
 class_weights = class_weight.compute_class_weight(
-           'balanced',
-            np.unique(train_gen.classes),
-            train_gen.classes)
+    'balanced',
+    np.unique(train_gen.classes),
+    train_gen.classes)
 
 model = None
 hist = None
@@ -50,42 +52,45 @@ hist = None
 def create_model():
     global model
     model = Sequential()
-    model.add(Conv2D(32, (3, 3), input_shape=(256, 256, 3)))
+    model.add(Conv2D(32, (3, 3), input_shape=(256, 256, 3), activity_regularizer=l2(0.001)))
     model.add(Activation('relu'))
-    model.add(Conv2D(32, (3, 3), input_shape=(256, 256, 3)))
-    model.add(Activation('relu'))
-    model.add(MaxPooling2D(pool_size=(2, 2)))
-
-    model.add(Conv2D(64, (3, 3)))
-    model.add(Activation('relu'))
-    model.add(Conv2D(64, (3, 3)))
+    model.add(Conv2D(32, (3, 3), activity_regularizer=l2(0.001)))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size=(2, 2)))
 
-    model.add(Conv2D(128, (3, 3)))
+    model.add(Conv2D(64, (3, 3), activity_regularizer=l2(0.001)))
     model.add(Activation('relu'))
-    model.add(Conv2D(128, (3, 3)))
+    model.add(Conv2D(64, (3, 3), activity_regularizer=l2(0.001)))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size=(2, 2)))
 
-    model.add(Conv2D(256, (3, 3)))
+    model.add(Conv2D(128, (3, 3), activity_regularizer=l2(0.001)))
     model.add(Activation('relu'))
-    model.add(Conv2D(256, (3, 3)))
+    model.add(Conv2D(128, (3, 3), activity_regularizer=l2(0.001)))
+    model.add(Activation('relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+
+    model.add(Conv2D(256, (3, 3), activity_regularizer=l2(0.001)))
+    model.add(Activation('relu'))
+    model.add(Conv2D(256, (3, 3), activity_regularizer=l2(0.001)))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size=(2, 2)))
 
     model.add(Flatten())
 
-    model.add(Dense(2048))
+    model.add(Dense(2048, activity_regularizer=l2(0.001)))
     model.add(Dropout(0.5))
 
-    model.add(Dense(256))
+    model.add(Dense(1024, activity_regularizer=l2(0.001)))
+    model.add(Dropout(0.5))
+
+    model.add(Dense(256, activity_regularizer=l2(0.001)))
     model.add(Dropout(0.5))
 
     model.add(Dense(9))
     model.add(Activation('softmax'))
 
-    model.compile(loss='categorical_crossentropy', optimizer=optimizers.Adam(lr=0.00001), metrics=['accuracy'])
+    model.compile(loss='categorical_crossentropy', optimizer=optimizers.Adam(lr=0.0001), metrics=['accuracy'])
 
 
 def save():
@@ -123,10 +128,30 @@ def train(steps_per_epoch=1000, epochs=1):
         steps_per_epoch=steps_per_epoch,
         epochs=epochs,
         validation_data=test_gen,
-        validation_steps=steps_per_epoch/4,
+        validation_steps=steps_per_epoch / 4,
         workers=12,
         class_weight=class_weights
     )
+
+
+def load_image(name):
+    img = Image.open(name)
+    img.load()
+    img: Image.Image
+    img = img.resize((256, 256))
+    data = np.asarray(img, dtype="float32")
+    data /= 255
+    data = np.expand_dims(data, axis=0)
+    return data
+
+
+def predict(image):
+    classes = [dir_name for dir_name in os.listdir('./data/train')]
+    classes.sort()
+    p = model.predict(image)
+    p = [round(e, 4) for e in p[0].tolist()]
+    d = dict(zip(classes, p))
+    print(d)
 
 
 load_latest()
