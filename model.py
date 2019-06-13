@@ -1,15 +1,33 @@
-from keras.preprocessing.image import ImageDataGenerator, array_to_img, img_to_array, load_img
-from keras.layers import *
-from keras.models import Sequential, load_model
-from keras import optimizers
-from keras.regularizers import *
-from datetime import datetime
-from sklearn.utils import class_weight
-import keras.backend as K
 import glob
 import os
+import time
+from datetime import datetime
+
+import keras.backend as K
 import numpy as np
+import tensorflow as tf
 from PIL import Image
+from keras import callbacks
+from keras import optimizers
+from keras.layers import *
+from keras.models import Sequential, load_model
+from keras.preprocessing.image import ImageDataGenerator
+from keras.regularizers import *
+from sklearn.utils import class_weight
+
+model = None
+hist = None
+
+# K.set_floatx('float16')
+# K.set_epsilon(1e-4)
+
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+K.tensorflow_backend.set_session(tf.Session(config=config))
+
+BATCH_SIZE = 200
+VIEWINGS = 60000
+STEPS_PER_EPOCH = VIEWINGS // BATCH_SIZE
 
 train_datagen = ImageDataGenerator(
     rotation_range=30,
@@ -26,17 +44,17 @@ test_datagen = ImageDataGenerator(rescale=1. / 255)
 
 train_gen = train_datagen.flow_from_directory(
     'data/train',
-    batch_size=60,
+    batch_size=BATCH_SIZE,
     class_mode='categorical',
-    target_size=(256, 256),
+    target_size=(128, 128),
     interpolation='bicubic'
 )
 
 test_gen = test_datagen.flow_from_directory(
     'data/test',
-    batch_size=60,
+    batch_size=BATCH_SIZE,
     class_mode='categorical',
-    target_size=(256, 256),
+    target_size=(128, 128),
     interpolation='bicubic'
 )
 
@@ -45,14 +63,11 @@ class_weights = class_weight.compute_class_weight(
     np.unique(train_gen.classes),
     train_gen.classes)
 
-model = None
-hist = None
-
 
 def create_model():
     global model
     model = Sequential()
-    model.add(Conv2D(32, (3, 3), input_shape=(256, 256, 3), activity_regularizer=l2(0.001)))
+    model.add(Conv2D(32, (3, 3), input_shape=(128, 128, 3), activity_regularizer=l2(0.001)))
     model.add(Activation('relu'))
     model.add(Conv2D(32, (3, 3), activity_regularizer=l2(0.001)))
     model.add(Activation('relu'))
@@ -70,27 +85,28 @@ def create_model():
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size=(2, 2)))
 
-    model.add(Conv2D(256, (3, 3), activity_regularizer=l2(0.001)))
-    model.add(Activation('relu'))
-    model.add(Conv2D(256, (3, 3), activity_regularizer=l2(0.001)))
-    model.add(Activation('relu'))
-    model.add(MaxPooling2D(pool_size=(2, 2)))
-
     model.add(Flatten())
 
     model.add(Dense(2048, activity_regularizer=l2(0.001)))
+    model.add(Activation('relu'))
     model.add(Dropout(0.5))
 
     model.add(Dense(1024, activity_regularizer=l2(0.001)))
+    model.add(Activation('relu'))
+    model.add(Dropout(0.5))
+
+    model.add(Dense(512, activity_regularizer=l2(0.001)))
+    model.add(Activation('relu'))
     model.add(Dropout(0.5))
 
     model.add(Dense(256, activity_regularizer=l2(0.001)))
+    model.add(Activation('relu'))
     model.add(Dropout(0.5))
 
     model.add(Dense(9))
     model.add(Activation('softmax'))
 
-    model.compile(loss='categorical_crossentropy', optimizer=optimizers.Adam(lr=0.0001), metrics=['accuracy'])
+    model.compile(loss='categorical_crossentropy', optimizer=optimizers.Adam(lr=0.001), metrics=['accuracy'])
 
 
 def save():
@@ -117,28 +133,37 @@ def load_latest():
     files = glob.glob('./models/*.h5')
     latest = max(files, key=os.path.getctime)
     model = load_model(latest)
+    return model
 
 
-def train(steps_per_epoch=1000, epochs=1):
+def train(epochs=1):
     global model
     global hist
     assert isinstance(model, Sequential)
+
     hist = model.fit_generator(
         train_gen,
-        steps_per_epoch=steps_per_epoch,
+        steps_per_epoch=STEPS_PER_EPOCH,
         epochs=epochs,
         validation_data=test_gen,
-        validation_steps=steps_per_epoch / 4,
+        validation_steps=STEPS_PER_EPOCH // 4,
         workers=12,
         class_weight=class_weights
     )
+
+
+def train_multi(num):
+    for i in range(num):
+        train(epochs=1)
+        save()
+        time.sleep(5)
 
 
 def load_image(name):
     img = Image.open(name)
     img.load()
     img: Image.Image
-    img = img.resize((256, 256))
+    img = img.resize((128, 128))
     data = np.asarray(img, dtype="float32")
     data /= 255
     data = np.expand_dims(data, axis=0)
@@ -154,7 +179,8 @@ def predict(image):
     print(d)
 
 
-load_latest()
-# create_model()
-# model.summary()
+# load_latest()
+create_model()
+model.summary()
 # train()
+train_multi(5)
