@@ -25,7 +25,7 @@ config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 K.tensorflow_backend.set_session(tf.Session(config=config))
 
-BATCH_SIZE = 200
+BATCH_SIZE = 100
 VIEWINGS = 60000
 STEPS_PER_EPOCH = VIEWINGS // BATCH_SIZE
 
@@ -85,6 +85,12 @@ def create_model():
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size=(2, 2)))
 
+    model.add(Conv2D(256, (3, 3), activity_regularizer=l2(0.001)))
+    model.add(Activation('relu'))
+    model.add(Conv2D(256, (3, 3), activity_regularizer=l2(0.001)))
+    model.add(Activation('relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+
     model.add(Flatten())
 
     model.add(Dense(2048, activity_regularizer=l2(0.001)))
@@ -106,7 +112,7 @@ def create_model():
     model.add(Dense(9))
     model.add(Activation('softmax'))
 
-    model.compile(loss='categorical_crossentropy', optimizer=optimizers.Adam(lr=0.001), metrics=['accuracy'])
+    model.compile(loss='categorical_crossentropy', optimizer=optimizers.Adam(lr=0.0001), metrics=['accuracy'])
 
 
 def save():
@@ -183,4 +189,4 @@ def predict(image):
 create_model()
 model.summary()
 # train()
-train_multi(5)
+# train_multi(5)
